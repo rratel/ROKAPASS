@@ -40,8 +40,9 @@ onMounted(async () => {
   const day = dayMap[dayOfWeek]
 
   const training = surveyStore.trainingInfo
-  if (training && training[`lunch_image_${day}`]) {
-    lunchImage.value = training[`lunch_image_${day}`]
+  if (training) {
+    // 새로운 URL 필드 우선 사용, 없으면 기존 필드 사용 (호환성)
+    lunchImage.value = training[`lunch_image_${day}_url`] || training[`lunch_image_${day}`] || null
   }
 })
 

@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\QuestionController as AdminQuestionController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\ExitScannerController;
+use App\Http\Controllers\Admin\UploadController;
 
 /*
 |--------------------------------------------------------------------------
@@ -100,4 +101,8 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     // 퇴소 스캐너
     Route::post('/exit-scan', [ExitScannerController::class, 'scan']);
     Route::post('/confirm-exit', [ExitScannerController::class, 'confirmExit']);
+
+    // 파일 업로드
+    Route::post('/upload/lunch-image', [UploadController::class, 'uploadLunchImage']);
+    Route::delete('/upload/lunch-image', [UploadController::class, 'deleteLunchImage']);
 });

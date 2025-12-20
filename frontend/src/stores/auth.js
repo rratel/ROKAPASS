@@ -1,6 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import axios from 'axios'
 import api from '@/services/api'
+
+// CSRF 쿠키 가져오기
+async function getCsrfCookie() {
+  const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || ''
+  await axios.get(`${backendUrl}/sanctum/csrf-cookie`, { withCredentials: true })
+}
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -15,6 +22,7 @@ export const useAuthStore = defineStore('auth', () => {
   // Actions
   async function login(email, password) {
     try {
+      await getCsrfCookie()
       const response = await api.post('/auth/login', { email, password })
       if (response.data.success) {
         token.value = response.data.data.token

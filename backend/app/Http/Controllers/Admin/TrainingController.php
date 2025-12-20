@@ -31,11 +31,11 @@ class TrainingController extends Controller
             'name' => 'required|string|max:200',
             'training_date' => 'required|date',
             'purge_days' => 'integer|min:1|max:30',
-            'lunch_image_mon' => 'nullable|url|max:500',
-            'lunch_image_tue' => 'nullable|url|max:500',
-            'lunch_image_wed' => 'nullable|url|max:500',
-            'lunch_image_thu' => 'nullable|url|max:500',
-            'lunch_image_fri' => 'nullable|url|max:500',
+            'lunch_image_mon' => 'nullable|string|max:500',
+            'lunch_image_tue' => 'nullable|string|max:500',
+            'lunch_image_wed' => 'nullable|string|max:500',
+            'lunch_image_thu' => 'nullable|string|max:500',
+            'lunch_image_fri' => 'nullable|string|max:500',
         ]);
 
         $training = Training::create([
@@ -90,11 +90,11 @@ class TrainingController extends Controller
             'name' => 'string|max:200',
             'training_date' => 'date',
             'purge_days' => 'integer|min:1|max:30',
-            'lunch_image_mon' => 'nullable|url|max:500',
-            'lunch_image_tue' => 'nullable|url|max:500',
-            'lunch_image_wed' => 'nullable|url|max:500',
-            'lunch_image_thu' => 'nullable|url|max:500',
-            'lunch_image_fri' => 'nullable|url|max:500',
+            'lunch_image_mon' => 'nullable|string|max:500',
+            'lunch_image_tue' => 'nullable|string|max:500',
+            'lunch_image_wed' => 'nullable|string|max:500',
+            'lunch_image_thu' => 'nullable|string|max:500',
+            'lunch_image_fri' => 'nullable|string|max:500',
         ]);
 
         $oldValues = $training->toArray();

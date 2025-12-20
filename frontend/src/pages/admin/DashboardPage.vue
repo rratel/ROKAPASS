@@ -1,7 +1,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import AdminLayout from '@/components/admin/AdminLayout.vue'
 import api from '@/services/api'
+
+const router = useRouter()
 
 const stats = ref({
   todayResponses: 0,
@@ -91,7 +94,10 @@ function getStatusBadge(status) {
       <!-- Stats Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <!-- Today Responses -->
-        <div class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100">
+        <div
+          class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100 cursor-pointer"
+          @click="router.push({ name: 'Responses' })"
+        >
           <div class="flex items-start justify-between">
             <div>
               <p class="text-sm font-medium text-slate-500">오늘 등록</p>
@@ -107,7 +113,10 @@ function getStatusBadge(status) {
         </div>
 
         <!-- Today Entries -->
-        <div class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100">
+        <div
+          class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100 cursor-pointer"
+          @click="router.push({ name: 'Responses', query: { status: 'entered' } })"
+        >
           <div class="flex items-start justify-between">
             <div>
               <p class="text-sm font-medium text-slate-500">오늘 입소</p>
@@ -123,7 +132,10 @@ function getStatusBadge(status) {
         </div>
 
         <!-- Today Exits -->
-        <div class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100">
+        <div
+          class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100 cursor-pointer"
+          @click="router.push({ name: 'Responses', query: { status: 'exited' } })"
+        >
           <div class="flex items-start justify-between">
             <div>
               <p class="text-sm font-medium text-slate-500">오늘 퇴소</p>
@@ -139,7 +151,10 @@ function getStatusBadge(status) {
         </div>
 
         <!-- Active Trainings -->
-        <div class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100">
+        <div
+          class="group bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100 cursor-pointer"
+          @click="router.push({ name: 'Trainings' })"
+        >
           <div class="flex items-start justify-between">
             <div>
               <p class="text-sm font-medium text-slate-500">진행 중 훈련</p>

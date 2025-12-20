@@ -48,10 +48,13 @@ const resultInfo = computed(() => {
       borderColor: 'border-red-200',
       iconBg: 'bg-red-500',
       ringColor: 'ring-red-500/20',
-      message: '건강 상태 확인이 필요합니다. 관리자에게 문의하세요.',
+      message: '상담이 필요합니다.',
+      subMessage: '행정병 또는 군의관에게 안내를 받으세요.',
     }
   }
 })
+
+const isDanger = computed(() => surveyStore.surveyResult === 'DANGER')
 
 onMounted(() => {
   if (!surveyStore.uuid) {
@@ -59,7 +62,10 @@ onMounted(() => {
     return
   }
 
-  initCanvas()
+  // DANGER가 아닌 경우에만 서명 캔버스 초기화
+  if (surveyStore.surveyResult !== 'DANGER') {
+    initCanvas()
+  }
 })
 
 function initCanvas() {
@@ -201,6 +207,9 @@ async function submitSignature() {
           <p :class="['text-sm leading-relaxed', resultInfo.textColor]">
             {{ resultInfo.message }}
           </p>
+          <p v-if="resultInfo.subMessage" :class="['text-sm leading-relaxed mt-2 font-semibold', resultInfo.textColor]">
+            {{ resultInfo.subMessage }}
+          </p>
         </div>
       </div>
 
@@ -233,8 +242,8 @@ async function submitSignature() {
         </dl>
       </div>
 
-      <!-- Signature Pad -->
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 mb-6">
+      <!-- Signature Pad (NORMAL, CAUTION only) -->
+      <div v-if="!isDanger" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 mb-6">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
@@ -286,16 +295,17 @@ async function submitSignature() {
         </div>
       </div>
 
-      <!-- Error -->
-      <div v-if="error" class="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl mb-6">
+      <!-- Error (NORMAL, CAUTION only) -->
+      <div v-if="error && !isDanger" class="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl mb-6">
         <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
         <span class="text-sm text-red-600">{{ error }}</span>
       </div>
 
-      <!-- Submit Button -->
+      <!-- Submit Button (NORMAL, CAUTION only) -->
       <button
+        v-if="!isDanger"
         @click="submitSignature"
         :disabled="!hasSignature || submitting"
         :class="[
@@ -318,6 +328,36 @@ async function submitSignature() {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
           </svg>
         </span>
+      </button>
+
+      <!-- DANGER: 안내 메시지 -->
+      <div v-if="isDanger" class="bg-red-50 rounded-2xl p-6 border-2 border-red-200 mb-6">
+        <div class="flex items-start gap-4">
+          <div class="w-12 h-12 bg-red-500 rounded-xl flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-bold text-red-800 text-lg mb-2">QR 코드를 발급할 수 없습니다</h3>
+            <p class="text-red-700 text-sm leading-relaxed">
+              문진 결과에 따라 추가 상담이 필요합니다.<br>
+              <strong>행정병 또는 군의관에게 안내를 받으세요.</strong>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- DANGER: 처음으로 버튼 -->
+      <button
+        v-if="isDanger"
+        @click="router.push({ name: 'Landing' })"
+        class="w-full py-4 rounded-2xl font-bold text-lg bg-slate-200 text-slate-700 hover:bg-slate-300 transition-all duration-200 flex items-center justify-center gap-2"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+        </svg>
+        처음으로
       </button>
     </main>
   </div>

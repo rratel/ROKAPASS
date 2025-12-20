@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class Training extends Model
@@ -25,6 +26,14 @@ class Training extends Model
         'purge_days',
     ];
 
+    protected $appends = [
+        'lunch_image_mon_url',
+        'lunch_image_tue_url',
+        'lunch_image_wed_url',
+        'lunch_image_thu_url',
+        'lunch_image_fri_url',
+    ];
+
     protected function casts(): array
     {
         return [
@@ -32,6 +41,49 @@ class Training extends Model
             'auto_purge_at' => 'datetime',
             'purge_days' => 'integer',
         ];
+    }
+
+    /**
+     * Convert storage path to full URL
+     */
+    protected function getImageUrl(?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+
+        // If it's already a full URL, return as-is
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        // Convert storage path to URL
+        return Storage::disk('public')->url($path);
+    }
+
+    public function getLunchImageMonUrlAttribute(): ?string
+    {
+        return $this->getImageUrl($this->lunch_image_mon);
+    }
+
+    public function getLunchImageTueUrlAttribute(): ?string
+    {
+        return $this->getImageUrl($this->lunch_image_tue);
+    }
+
+    public function getLunchImageWedUrlAttribute(): ?string
+    {
+        return $this->getImageUrl($this->lunch_image_wed);
+    }
+
+    public function getLunchImageThuUrlAttribute(): ?string
+    {
+        return $this->getImageUrl($this->lunch_image_thu);
+    }
+
+    public function getLunchImageFriUrlAttribute(): ?string
+    {
+        return $this->getImageUrl($this->lunch_image_fri);
     }
 
     protected static function boot()

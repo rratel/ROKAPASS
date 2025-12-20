@@ -1,7 +1,10 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import AdminLayout from '@/components/admin/AdminLayout.vue'
 import api from '@/services/api'
+
+const route = useRoute()
 
 const responses = ref([])
 const trainings = ref([])
@@ -23,6 +26,14 @@ const pagination = ref({
 })
 
 onMounted(async () => {
+  // URL 쿼리 파라미터로 필터 초기화
+  if (route.query.status) {
+    filters.value.attendance_status = route.query.status
+  }
+  if (route.query.result) {
+    filters.value.survey_result = route.query.result
+  }
+
   await Promise.all([
     fetchTrainings(),
     fetchResponses(),

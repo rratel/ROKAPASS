@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import AdminLayout from '@/components/admin/AdminLayout.vue'
 import api from '@/services/api'
+import axios from 'axios'
 import QRCode from 'qrcode'
 
 const trainings = ref([])
@@ -23,6 +24,25 @@ const form = ref({
   lunch_image_fri: '',
 })
 
+// 이미지 미리보기 URL (파일 업로드 시 임시 preview)
+const imagePreview = ref({
+  mon: null,
+  tue: null,
+  wed: null,
+  thu: null,
+  fri: null,
+})
+
+// 업로드할 파일 객체
+const imageFiles = ref({
+  mon: null,
+  tue: null,
+  wed: null,
+  thu: null,
+  fri: null,
+})
+
+const uploading = ref(false)
 const saving = ref(false)
 const error = ref(null)
 
@@ -50,6 +70,11 @@ async function fetchTrainings() {
   }
 }
 
+function resetImageState() {
+  imagePreview.value = { mon: null, tue: null, wed: null, thu: null, fri: null }
+  imageFiles.value = { mon: null, tue: null, wed: null, thu: null, fri: null }
+}
+
 function openCreateModal() {
   editingTraining.value = null
   form.value = {
@@ -62,6 +87,7 @@ function openCreateModal() {
     lunch_image_thu: '',
     lunch_image_fri: '',
   }
+  resetImageState()
   showModal.value = true
 }
 
@@ -77,7 +103,73 @@ function openEditModal(training) {
     lunch_image_thu: training.lunch_image_thu || '',
     lunch_image_fri: training.lunch_image_fri || '',
   }
+  // 기존 이미지 URL을 미리보기에 설정
+  imagePreview.value = {
+    mon: training.lunch_image_mon_url || null,
+    tue: training.lunch_image_tue_url || null,
+    wed: training.lunch_image_wed_url || null,
+    thu: training.lunch_image_thu_url || null,
+    fri: training.lunch_image_fri_url || null,
+  }
+  imageFiles.value = { mon: null, tue: null, wed: null, thu: null, fri: null }
   showModal.value = true
+}
+
+function handleImageSelect(day, event) {
+  const file = event.target.files[0]
+  if (!file) return
+
+  // 파일 크기 체크 (5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    error.value = '이미지 파일 크기는 5MB 이하여야 합니다.'
+    return
+  }
+
+  // 이미지 타입 체크
+  if (!file.type.startsWith('image/')) {
+    error.value = '이미지 파일만 업로드할 수 있습니다.'
+    return
+  }
+
+  imageFiles.value[day] = file
+
+  // 미리보기 생성
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    imagePreview.value[day] = e.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+function removeImage(day) {
+  imageFiles.value[day] = null
+  imagePreview.value[day] = null
+  form.value[`lunch_image_${day}`] = ''
+}
+
+async function uploadImage(day) {
+  const file = imageFiles.value[day]
+  if (!file) return null
+
+  const formData = new FormData()
+  formData.append('image', file)
+
+  try {
+    // CSRF 쿠키 가져오기 (419 에러 방지)
+    const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || ''
+    await axios.get(`${backendUrl}/sanctum/csrf-cookie`, { withCredentials: true })
+
+    const response = await api.post('/admin/upload/lunch-image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    if (response.data.success) {
+      return response.data.data.path
+    }
+  } catch (e) {
+    console.error('Image upload failed:', e)
+    throw new Error(`${day} 이미지 업로드에 실패했습니다.`)
+  }
+  return null
 }
 
 async function openQRModal(training) {
@@ -140,9 +232,23 @@ async function saveTraining() {
   }
 
   saving.value = true
+  uploading.value = true
   error.value = null
 
   try {
+    // 새로운 이미지 파일들 업로드
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri']
+    for (const day of days) {
+      if (imageFiles.value[day]) {
+        const path = await uploadImage(day)
+        if (path) {
+          form.value[`lunch_image_${day}`] = path
+        }
+      }
+    }
+
+    uploading.value = false
+
     if (editingTraining.value) {
       await api.put(`/admin/trainings/${editingTraining.value.id}`, form.value)
     } else {
@@ -151,9 +257,10 @@ async function saveTraining() {
     await fetchTrainings()
     closeModal()
   } catch (e) {
-    error.value = e.response?.data?.error?.message || '저장에 실패했습니다.'
+    error.value = e.message || e.response?.data?.error?.message || '저장에 실패했습니다.'
   } finally {
     saving.value = false
+    uploading.value = false
   }
 }
 
@@ -450,54 +557,185 @@ function getStatusBadge(status) {
 
             <!-- Lunch Images -->
             <div>
-              <label class="block text-sm font-semibold text-slate-700 mb-3">요일별 중식 이미지 URL</label>
+              <label class="block text-sm font-semibold text-slate-700 mb-3">요일별 중식 이미지</label>
               <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <!-- 월요일 -->
                 <div>
                   <label class="block text-xs text-slate-500 mb-1.5">월요일</label>
-                  <input
-                    v-model="form.lunch_image_mon"
-                    type="url"
-                    class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    placeholder="URL"
-                  />
+                  <div class="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      @change="handleImageSelect('mon', $event)"
+                      class="hidden"
+                      :id="'lunch-mon'"
+                    />
+                    <label
+                      v-if="!imagePreview.mon"
+                      :for="'lunch-mon'"
+                      class="flex flex-col items-center justify-center w-full h-24 bg-slate-50 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                    >
+                      <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      </svg>
+                      <span class="text-xs text-slate-400 mt-1">업로드</span>
+                    </label>
+                    <div v-else class="relative w-full h-24">
+                      <img :src="imagePreview.mon" class="w-full h-full object-cover rounded-lg" />
+                      <button
+                        type="button"
+                        @click="removeImage('mon')"
+                        class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
+                <!-- 화요일 -->
                 <div>
                   <label class="block text-xs text-slate-500 mb-1.5">화요일</label>
-                  <input
-                    v-model="form.lunch_image_tue"
-                    type="url"
-                    class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    placeholder="URL"
-                  />
+                  <div class="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      @change="handleImageSelect('tue', $event)"
+                      class="hidden"
+                      :id="'lunch-tue'"
+                    />
+                    <label
+                      v-if="!imagePreview.tue"
+                      :for="'lunch-tue'"
+                      class="flex flex-col items-center justify-center w-full h-24 bg-slate-50 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                    >
+                      <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      </svg>
+                      <span class="text-xs text-slate-400 mt-1">업로드</span>
+                    </label>
+                    <div v-else class="relative w-full h-24">
+                      <img :src="imagePreview.tue" class="w-full h-full object-cover rounded-lg" />
+                      <button
+                        type="button"
+                        @click="removeImage('tue')"
+                        class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
+                <!-- 수요일 -->
                 <div>
                   <label class="block text-xs text-slate-500 mb-1.5">수요일</label>
-                  <input
-                    v-model="form.lunch_image_wed"
-                    type="url"
-                    class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    placeholder="URL"
-                  />
+                  <div class="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      @change="handleImageSelect('wed', $event)"
+                      class="hidden"
+                      :id="'lunch-wed'"
+                    />
+                    <label
+                      v-if="!imagePreview.wed"
+                      :for="'lunch-wed'"
+                      class="flex flex-col items-center justify-center w-full h-24 bg-slate-50 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                    >
+                      <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      </svg>
+                      <span class="text-xs text-slate-400 mt-1">업로드</span>
+                    </label>
+                    <div v-else class="relative w-full h-24">
+                      <img :src="imagePreview.wed" class="w-full h-full object-cover rounded-lg" />
+                      <button
+                        type="button"
+                        @click="removeImage('wed')"
+                        class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
+                <!-- 목요일 -->
                 <div>
                   <label class="block text-xs text-slate-500 mb-1.5">목요일</label>
-                  <input
-                    v-model="form.lunch_image_thu"
-                    type="url"
-                    class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    placeholder="URL"
-                  />
+                  <div class="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      @change="handleImageSelect('thu', $event)"
+                      class="hidden"
+                      :id="'lunch-thu'"
+                    />
+                    <label
+                      v-if="!imagePreview.thu"
+                      :for="'lunch-thu'"
+                      class="flex flex-col items-center justify-center w-full h-24 bg-slate-50 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                    >
+                      <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      </svg>
+                      <span class="text-xs text-slate-400 mt-1">업로드</span>
+                    </label>
+                    <div v-else class="relative w-full h-24">
+                      <img :src="imagePreview.thu" class="w-full h-full object-cover rounded-lg" />
+                      <button
+                        type="button"
+                        @click="removeImage('thu')"
+                        class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
+                <!-- 금요일 -->
                 <div>
                   <label class="block text-xs text-slate-500 mb-1.5">금요일</label>
-                  <input
-                    v-model="form.lunch_image_fri"
-                    type="url"
-                    class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                    placeholder="URL"
-                  />
+                  <div class="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      @change="handleImageSelect('fri', $event)"
+                      class="hidden"
+                      :id="'lunch-fri'"
+                    />
+                    <label
+                      v-if="!imagePreview.fri"
+                      :for="'lunch-fri'"
+                      class="flex flex-col items-center justify-center w-full h-24 bg-slate-50 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                    >
+                      <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      </svg>
+                      <span class="text-xs text-slate-400 mt-1">업로드</span>
+                    </label>
+                    <div v-else class="relative w-full h-24">
+                      <img :src="imagePreview.fri" class="w-full h-full object-cover rounded-lg" />
+                      <button
+                        type="button"
+                        @click="removeImage('fri')"
+                        class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
+              <p class="text-xs text-slate-500 mt-2">각 요일별로 이미지를 업로드하세요. (최대 5MB, jpg/png/gif/webp)</p>
             </div>
 
             <!-- Error -->
@@ -526,7 +764,7 @@ function getStatusBadge(status) {
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                 </svg>
-                <span>{{ saving ? '저장 중...' : '저장' }}</span>
+                <span>{{ uploading ? '이미지 업로드 중...' : saving ? '저장 중...' : '저장' }}</span>
               </button>
             </div>
           </form>

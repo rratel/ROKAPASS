@@ -152,13 +152,21 @@ class SurveyController extends Controller
 
     private function calculateResult(array $answers, $questions): string
     {
+        $dangerCount = 0;
+
         foreach ($questions as $question) {
             $answer = $answers[$question->id] ?? null;
             if (!$answer) continue;
 
             if ($question->hasDangerOption($answer)) {
-                return 'DANGER';
+                $dangerCount++;
             }
+        }
+
+        if ($dangerCount >= 2) {
+            return 'DANGER';
+        } elseif ($dangerCount === 1) {
+            return 'CAUTION';
         }
 
         return 'NORMAL';
