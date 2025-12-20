@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class Training extends Model
 {
@@ -11,6 +12,7 @@ class Training extends Model
 
     protected $fillable = [
         'name',
+        'access_code',
         'training_date',
         'status',
         'lunch_image_mon',
@@ -30,6 +32,26 @@ class Training extends Model
             'auto_purge_at' => 'datetime',
             'purge_days' => 'integer',
         ];
+    }
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($training) {
+            if (empty($training->access_code)) {
+                $training->access_code = self::generateUniqueCode();
+            }
+        });
+    }
+
+    public static function generateUniqueCode(): string
+    {
+        do {
+            $code = strtoupper(Str::random(6));
+        } while (self::where('access_code', $code)->exists());
+
+        return $code;
     }
 
     public function surveyResponses()
@@ -77,6 +99,13 @@ class Training extends Model
         ]);
     }
 
+    public function pause(): void
+    {
+        $this->update([
+            'status' => 'scheduled',
+        ]);
+    }
+
     public function complete(): void
     {
         $this->update([
@@ -98,5 +127,10 @@ class Training extends Model
             'danger' => $responses->where('survey_result', 'DANGER')->count(),
             'lunch' => $responses->where('lunch_yn', true)->count(),
         ];
+    }
+
+    public function getAccessUrl(): string
+    {
+        return config('app.frontend_url', '') . '/t/' . $this->access_code;
     }
 }

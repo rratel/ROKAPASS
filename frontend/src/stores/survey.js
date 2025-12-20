@@ -5,6 +5,7 @@ export const useSurveyStore = defineStore('survey', () => {
   // State
   const trainingId = ref(null)
   const trainingInfo = ref(null)
+  const accessCode = ref(null)
   const personalInfo = ref({
     name: '',
     dob: '',
@@ -33,6 +34,7 @@ export const useSurveyStore = defineStore('survey', () => {
   function setTrainingInfo(info) {
     trainingId.value = info.id
     trainingInfo.value = info
+    accessCode.value = info.access_code
   }
 
   function setPersonalInfo(info) {
@@ -71,6 +73,7 @@ export const useSurveyStore = defineStore('survey', () => {
   function reset() {
     trainingId.value = null
     trainingInfo.value = null
+    accessCode.value = null
     personalInfo.value = {
       name: '',
       dob: '',
@@ -116,6 +119,7 @@ export const useSurveyStore = defineStore('survey', () => {
     // State
     trainingId,
     trainingInfo,
+    accessCode,
     personalInfo,
     answers,
     currentQuestionIndex,

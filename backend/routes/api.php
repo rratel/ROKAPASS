@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\ExitScannerController;
 
 // 훈련 정보
 Route::get('/trainings/active', [TrainingController::class, 'active']);
+Route::get('/trainings/code/{code}', [TrainingController::class, 'showByCode']);
 Route::get('/trainings/{id}', [TrainingController::class, 'show']);
 
 // 문진표 문항
@@ -68,6 +69,8 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     Route::put('/trainings/{id}', [AdminTrainingController::class, 'update']);
     Route::delete('/trainings/{id}', [AdminTrainingController::class, 'destroy']);
     Route::post('/trainings/{id}/activate', [AdminTrainingController::class, 'activate']);
+    Route::post('/trainings/{id}/pause', [AdminTrainingController::class, 'pause']);
+    Route::post('/trainings/{id}/complete', [AdminTrainingController::class, 'complete']);
 
     // 응답 관리
     Route::get('/responses', [ResponseController::class, 'index']);

@@ -30,7 +30,6 @@ class TrainingController extends Controller
         $request->validate([
             'name' => 'required|string|max:200',
             'training_date' => 'required|date',
-            'exit_mode' => 'in:auto,confirm',
             'purge_days' => 'integer|min:1|max:30',
             'lunch_image_mon' => 'nullable|url|max:500',
             'lunch_image_tue' => 'nullable|url|max:500',
@@ -43,7 +42,6 @@ class TrainingController extends Controller
             'name' => $request->name,
             'training_date' => $request->training_date,
             'status' => 'scheduled',
-            'exit_mode' => $request->exit_mode ?? 'auto',
             'purge_days' => $request->purge_days ?? 3,
             'lunch_image_mon' => $request->lunch_image_mon,
             'lunch_image_tue' => $request->lunch_image_tue,
@@ -91,7 +89,6 @@ class TrainingController extends Controller
         $request->validate([
             'name' => 'string|max:200',
             'training_date' => 'date',
-            'exit_mode' => 'in:auto,confirm',
             'purge_days' => 'integer|min:1|max:30',
             'lunch_image_mon' => 'nullable|url|max:500',
             'lunch_image_tue' => 'nullable|url|max:500',
@@ -102,7 +99,7 @@ class TrainingController extends Controller
 
         $oldValues = $training->toArray();
         $training->update($request->only([
-            'name', 'training_date', 'exit_mode', 'purge_days',
+            'name', 'training_date', 'purge_days',
             'lunch_image_mon', 'lunch_image_tue', 'lunch_image_wed',
             'lunch_image_thu', 'lunch_image_fri',
         ]));
@@ -151,6 +148,62 @@ class TrainingController extends Controller
         $training->activate();
 
         AuditLog::log('activate', 'training', $training->id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $training,
+        ]);
+    }
+
+    public function pause($id)
+    {
+        $training = Training::find($id);
+
+        if (!$training) {
+            return response()->json([
+                'success' => false,
+                'error' => ['message' => '훈련을 찾을 수 없습니다.'],
+            ], 404);
+        }
+
+        if ($training->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'error' => ['message' => '진행중인 훈련만 일시정지할 수 있습니다.'],
+            ], 400);
+        }
+
+        $training->pause();
+
+        AuditLog::log('pause', 'training', $training->id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $training,
+        ]);
+    }
+
+    public function complete($id)
+    {
+        $training = Training::find($id);
+
+        if (!$training) {
+            return response()->json([
+                'success' => false,
+                'error' => ['message' => '훈련을 찾을 수 없습니다.'],
+            ], 404);
+        }
+
+        if ($training->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'error' => ['message' => '진행중인 훈련만 종료할 수 있습니다.'],
+            ], 400);
+        }
+
+        $training->complete();
+
+        AuditLog::log('complete', 'training', $training->id);
 
         return response()->json([
             'success' => true,

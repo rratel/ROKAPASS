@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 // Public pages (예비군)
 const LandingPage = () => import('@/pages/public/LandingPage.vue')
+const TrainingEntryPage = () => import('@/pages/public/TrainingEntryPage.vue')
 const FormPage = () => import('@/pages/public/FormPage.vue')
 const SurveyPage = () => import('@/pages/public/SurveyPage.vue')
 const ResultPage = () => import('@/pages/public/ResultPage.vue')
@@ -27,6 +28,12 @@ const routes = [
     path: '/',
     name: 'Landing',
     component: LandingPage,
+  },
+  // Training entry via QR code (새로운 흐름)
+  {
+    path: '/t/:code',
+    name: 'TrainingEntry',
+    component: TrainingEntryPage,
   },
   {
     path: '/form',
@@ -67,6 +74,10 @@ const routes = [
   },
 
   // Admin routes
+  {
+    path: '/admin',
+    redirect: '/admin/login',
+  },
   {
     path: '/admin/login',
     name: 'AdminLogin',
