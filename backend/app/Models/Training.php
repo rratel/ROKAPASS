@@ -14,7 +14,8 @@ class Training extends Model
     protected $fillable = [
         'name',
         'access_code',
-        'training_date',
+        'start_date',
+        'end_date',
         'status',
         'lunch_image_mon',
         'lunch_image_tue',
@@ -37,7 +38,8 @@ class Training extends Model
     protected function casts(): array
     {
         return [
-            'training_date' => 'date',
+            'start_date' => 'date',
+            'end_date' => 'date',
             'auto_purge_at' => 'datetime',
             'purge_days' => 'integer',
         ];

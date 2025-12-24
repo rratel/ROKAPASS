@@ -100,7 +100,12 @@ function clearSettings() {
               >
                 <p class="font-medium">{{ training.name }}</p>
                 <p class="text-sm text-gray-400 mt-1">
-                  {{ new Date(training.training_date).toLocaleDateString('ko-KR') }}
+                  <template v-if="training.start_date === training.end_date">
+                    {{ new Date(training.start_date).toLocaleDateString('ko-KR') }}
+                  </template>
+                  <template v-else>
+                    {{ new Date(training.start_date).toLocaleDateString('ko-KR') }} ~ {{ new Date(training.end_date).toLocaleDateString('ko-KR') }}
+                  </template>
                 </p>
                 <p class="text-sm text-gray-500 mt-1">
                   퇴소 모드: {{ training.exit_mode === 'auto' ? '자동' : '확인' }}

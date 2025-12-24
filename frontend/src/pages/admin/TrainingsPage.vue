@@ -13,9 +13,31 @@ const editingTraining = ref(null)
 const selectedTraining = ref(null)
 const qrCanvas = ref(null)
 
+// 필터
+const statusFilter = ref('')
+
+const filteredTrainings = computed(() => {
+  if (!statusFilter.value) {
+    return trainings.value
+  }
+  return trainings.value.filter(t => t.status === statusFilter.value)
+})
+
+const statusCounts = computed(() => {
+  const counts = { all: 0, scheduled: 0, active: 0, completed: 0, purged: 0 }
+  trainings.value.forEach(t => {
+    counts.all++
+    if (counts[t.status] !== undefined) {
+      counts[t.status]++
+    }
+  })
+  return counts
+})
+
 const form = ref({
   name: '',
-  training_date: '',
+  start_date: '',
+  end_date: '',
   purge_days: 3,
   lunch_image_mon: '',
   lunch_image_tue: '',
@@ -79,7 +101,8 @@ function openCreateModal() {
   editingTraining.value = null
   form.value = {
     name: '',
-    training_date: '',
+    start_date: '',
+    end_date: '',
     purge_days: 3,
     lunch_image_mon: '',
     lunch_image_tue: '',
@@ -95,7 +118,8 @@ function openEditModal(training) {
   editingTraining.value = training
   form.value = {
     name: training.name,
-    training_date: training.training_date,
+    start_date: training.start_date,
+    end_date: training.end_date,
     purge_days: training.purge_days,
     lunch_image_mon: training.lunch_image_mon || '',
     lunch_image_tue: training.lunch_image_tue || '',
@@ -226,8 +250,13 @@ function copyAccessUrl() {
 }
 
 async function saveTraining() {
-  if (!form.value.name || !form.value.training_date) {
-    error.value = '훈련명과 훈련일을 입력해주세요.'
+  if (!form.value.name || !form.value.start_date || !form.value.end_date) {
+    error.value = '훈련명, 시작일, 종료일을 입력해주세요.'
+    return
+  }
+
+  if (new Date(form.value.end_date) < new Date(form.value.start_date)) {
+    error.value = '종료일은 시작일보다 이후여야 합니다.'
     return
   }
 
@@ -338,6 +367,65 @@ function getStatusBadge(status) {
         </button>
       </div>
 
+      <!-- Status Filter -->
+      <div class="flex flex-wrap gap-2">
+        <button
+          @click="statusFilter = ''"
+          :class="[
+            'px-4 py-2 rounded-xl text-sm font-medium transition-all',
+            statusFilter === ''
+              ? 'bg-slate-900 text-white'
+              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+          ]"
+        >
+          전체 <span class="ml-1 opacity-70">({{ statusCounts.all }})</span>
+        </button>
+        <button
+          @click="statusFilter = 'active'"
+          :class="[
+            'px-4 py-2 rounded-xl text-sm font-medium transition-all',
+            statusFilter === 'active'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-white text-emerald-600 hover:bg-emerald-50 border border-emerald-200'
+          ]"
+        >
+          진행중 <span class="ml-1 opacity-70">({{ statusCounts.active }})</span>
+        </button>
+        <button
+          @click="statusFilter = 'scheduled'"
+          :class="[
+            'px-4 py-2 rounded-xl text-sm font-medium transition-all',
+            statusFilter === 'scheduled'
+              ? 'bg-amber-500 text-white'
+              : 'bg-white text-amber-600 hover:bg-amber-50 border border-amber-200'
+          ]"
+        >
+          예정 <span class="ml-1 opacity-70">({{ statusCounts.scheduled }})</span>
+        </button>
+        <button
+          @click="statusFilter = 'completed'"
+          :class="[
+            'px-4 py-2 rounded-xl text-sm font-medium transition-all',
+            statusFilter === 'completed'
+              ? 'bg-slate-600 text-white'
+              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+          ]"
+        >
+          완료 <span class="ml-1 opacity-70">({{ statusCounts.completed }})</span>
+        </button>
+        <button
+          @click="statusFilter = 'purged'"
+          :class="[
+            'px-4 py-2 rounded-xl text-sm font-medium transition-all',
+            statusFilter === 'purged'
+              ? 'bg-red-600 text-white'
+              : 'bg-white text-red-600 hover:bg-red-50 border border-red-200'
+          ]"
+        >
+          파기됨 <span class="ml-1 opacity-70">({{ statusCounts.purged }})</span>
+        </button>
+      </div>
+
       <!-- Trainings Grid -->
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="inline-flex items-center gap-3">
@@ -367,9 +455,24 @@ function getStatusBadge(status) {
         </button>
       </div>
 
+      <div v-else-if="filteredTrainings.length === 0" class="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+        <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+          </svg>
+        </div>
+        <p class="text-slate-500 mb-4">해당 상태의 훈련이 없습니다.</p>
+        <button
+          @click="statusFilter = ''"
+          class="inline-flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-slate-700 font-medium"
+        >
+          필터 초기화
+        </button>
+      </div>
+
       <div v-else class="grid gap-4">
         <div
-          v-for="training in trainings"
+          v-for="training in filteredTrainings"
           :key="training.id"
           class="bg-white rounded-2xl border border-slate-100 p-6 hover:shadow-md transition-all duration-300"
         >
@@ -396,7 +499,12 @@ function getStatusBadge(status) {
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                   </svg>
-                  {{ new Date(training.training_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }) }}
+                  <template v-if="training.start_date === training.end_date">
+                    {{ new Date(training.start_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }) }}
+                  </template>
+                  <template v-else>
+                    {{ new Date(training.start_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) }} ~ {{ new Date(training.end_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) }}
+                  </template>
                 </div>
                 <div class="flex items-center gap-1.5">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -519,7 +627,7 @@ function getStatusBadge(status) {
 
           <form @submit.prevent="saveTraining" class="p-6 space-y-6">
             <!-- Basic Info -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="space-y-4">
               <div>
                 <label class="block text-sm font-semibold text-slate-700 mb-2">훈련명 *</label>
                 <input
@@ -529,14 +637,26 @@ function getStatusBadge(status) {
                   placeholder="2024년 1월 예비군 훈련"
                 />
               </div>
-              <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-2">훈련일 *</label>
-                <input
-                  v-model="form.training_date"
-                  type="date"
-                  class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                />
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">시작일 *</label>
+                  <input
+                    v-model="form.start_date"
+                    type="date"
+                    class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">종료일 *</label>
+                  <input
+                    v-model="form.end_date"
+                    type="date"
+                    :min="form.start_date"
+                    class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  />
+                </div>
               </div>
+              <p class="text-xs text-slate-500">2박 3일 등 여러 날 진행되는 훈련은 시작일과 종료일을 다르게 설정하세요.</p>
             </div>
 
             <!-- Settings -->
@@ -800,7 +920,12 @@ function getStatusBadge(status) {
             <div v-if="selectedTraining" class="text-center mb-6">
               <h3 class="text-lg font-semibold text-slate-900">{{ selectedTraining.name }}</h3>
               <p class="text-sm text-slate-500 mt-1">
-                {{ new Date(selectedTraining.training_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }) }}
+                <template v-if="selectedTraining.start_date === selectedTraining.end_date">
+                  {{ new Date(selectedTraining.start_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }) }}
+                </template>
+                <template v-else>
+                  {{ new Date(selectedTraining.start_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) }} ~ {{ new Date(selectedTraining.end_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) }}
+                </template>
               </p>
               <span class="inline-block mt-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-mono font-medium">
                 {{ selectedTraining.access_code }}

@@ -27,10 +27,17 @@ class ExitScannerController extends Controller
             ], 404);
         }
 
-        if ($response->attendance_status !== 'entered') {
+        if ($response->attendance_status === 'registered') {
             return response()->json([
                 'success' => false,
-                'error' => ['message' => '퇴소 처리할 수 없는 상태입니다.'],
+                'error' => ['message' => '아직 입소하지 않은 인원입니다.'],
+            ], 400);
+        }
+
+        if ($response->attendance_status === 'exited') {
+            return response()->json([
+                'success' => false,
+                'error' => ['message' => '이미 퇴소 처리된 인원입니다.'],
             ], 400);
         }
 
@@ -51,14 +58,26 @@ class ExitScannerController extends Controller
             'uuid' => 'required|string',
         ]);
 
-        $response = SurveyResponse::where('uuid', $request->uuid)
-            ->where('attendance_status', 'entered')
-            ->first();
+        $response = SurveyResponse::where('uuid', $request->uuid)->first();
 
         if (!$response) {
             return response()->json([
                 'success' => false,
-                'error' => ['message' => '퇴소 처리할 수 없습니다.'],
+                'error' => ['message' => '등록된 QR 코드가 아닙니다.'],
+            ], 404);
+        }
+
+        if ($response->attendance_status === 'registered') {
+            return response()->json([
+                'success' => false,
+                'error' => ['message' => '아직 입소하지 않은 인원입니다.'],
+            ], 400);
+        }
+
+        if ($response->attendance_status === 'exited') {
+            return response()->json([
+                'success' => false,
+                'error' => ['message' => '이미 퇴소 처리된 인원입니다.'],
             ], 400);
         }
 

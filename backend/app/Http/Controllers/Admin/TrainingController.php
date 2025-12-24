@@ -17,7 +17,7 @@ class TrainingController extends Controller
             $query->where('status', $request->status);
         }
 
-        $trainings = $query->orderBy('training_date', 'desc')->get();
+        $trainings = $query->orderBy('start_date', 'desc')->get();
 
         return response()->json([
             'success' => true,
@@ -29,7 +29,8 @@ class TrainingController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:200',
-            'training_date' => 'required|date',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
             'purge_days' => 'integer|min:1|max:30',
             'lunch_image_mon' => 'nullable|string|max:500',
             'lunch_image_tue' => 'nullable|string|max:500',
@@ -40,7 +41,8 @@ class TrainingController extends Controller
 
         $training = Training::create([
             'name' => $request->name,
-            'training_date' => $request->training_date,
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
             'status' => 'scheduled',
             'purge_days' => $request->purge_days ?? 3,
             'lunch_image_mon' => $request->lunch_image_mon,
@@ -88,7 +90,8 @@ class TrainingController extends Controller
 
         $request->validate([
             'name' => 'string|max:200',
-            'training_date' => 'date',
+            'start_date' => 'date',
+            'end_date' => 'date|after_or_equal:start_date',
             'purge_days' => 'integer|min:1|max:30',
             'lunch_image_mon' => 'nullable|string|max:500',
             'lunch_image_tue' => 'nullable|string|max:500',
@@ -99,7 +102,7 @@ class TrainingController extends Controller
 
         $oldValues = $training->toArray();
         $training->update($request->only([
-            'name', 'training_date', 'purge_days',
+            'name', 'start_date', 'end_date', 'purge_days',
             'lunch_image_mon', 'lunch_image_tue', 'lunch_image_wed',
             'lunch_image_thu', 'lunch_image_fri',
         ]));

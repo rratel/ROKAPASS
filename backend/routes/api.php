@@ -76,6 +76,11 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     // 응답 관리
     Route::get('/responses', [ResponseController::class, 'index']);
     Route::get('/responses/export', [ResponseController::class, 'export']);
+    Route::get('/responses/{id}', [ResponseController::class, 'show']);
+    Route::put('/responses/{id}', [ResponseController::class, 'update']);
+    Route::put('/responses/{id}/result', [ResponseController::class, 'updateResult']);
+    Route::put('/responses/{id}/answers', [ResponseController::class, 'updateAnswers']);
+    Route::delete('/responses/{id}', [ResponseController::class, 'destroy']);
 
     // 문진표 관리
     Route::get('/questions', [AdminQuestionController::class, 'index']);

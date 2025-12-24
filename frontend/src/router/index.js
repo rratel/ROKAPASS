@@ -21,6 +21,8 @@ const ResponsesPage = () => import('@/pages/admin/ResponsesPage.vue')
 const QuestionsPage = () => import('@/pages/admin/QuestionsPage.vue')
 const SettingsPage = () => import('@/pages/admin/SettingsPage.vue')
 const ExitScannerPage = () => import('@/pages/admin/ExitScannerPage.vue')
+const HelpPage = () => import('@/pages/admin/HelpPage.vue')
+const HelpGuidePage = () => import('@/pages/admin/HelpGuidePage.vue')
 
 const routes = [
   // Public routes (예비군용)
@@ -117,6 +119,18 @@ const routes = [
     path: '/admin/exit-scanner',
     name: 'ExitScanner',
     component: ExitScannerPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/admin/help',
+    name: 'Help',
+    component: HelpPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/admin/guide',
+    name: 'HelpGuide',
+    component: HelpGuidePage,
     meta: { requiresAuth: true },
   },
 ]

@@ -78,11 +78,12 @@ function retry() {
 
     <!-- Header -->
     <header class="relative py-8 px-4 text-center">
-      <div class="w-16 h-16 bg-emerald-500/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4 border border-emerald-500/30">
-        <svg class="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-        </svg>
-      </div>
+      <!-- 부산예비군훈련장 로고 -->
+      <img
+        src="/busan-training-center-logo.png"
+        alt="Busan Reserve Forces Training Center"
+        class="w-28 h-auto mx-auto mb-4"
+      />
       <h1 class="text-3xl font-bold text-white tracking-tight">ROKAPASS</h1>
       <p class="text-slate-400 mt-2">예비군 One-Step 입소 시스템</p>
     </header>
@@ -189,7 +190,12 @@ function retry() {
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                 </svg>
-                <span>{{ new Date(training.training_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }) }}</span>
+                <span v-if="training.start_date === training.end_date">
+                  {{ new Date(training.start_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }) }}
+                </span>
+                <span v-else>
+                  {{ new Date(training.start_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) }} ~ {{ new Date(training.end_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) }}
+                </span>
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { Html5Qrcode } from 'html5-qrcode'
 import AdminLayout from '@/components/admin/AdminLayout.vue'
 import api from '@/services/api'
 
@@ -12,6 +13,19 @@ const scanResult = ref(null)
 const showConfirmDialog = ref(false)
 const pendingExit = ref(null)
 const currentTime = ref(new Date())
+
+// 카메라 스캔 관련
+const scanMode = ref('manual') // 'camera' | 'manual' - 기본은 수동
+const cameraScanning = ref(false)
+const cameraLoading = ref(false) // 카메라 로딩 중
+const cameras = ref([])
+const selectedCameraId = ref(null)
+const cameraError = ref(null)
+const cameraAvailable = ref(false)
+let html5QrCode = null
+
+// 토스트 알림
+const toasts = ref([])
 
 let timeInterval = null
 let scanTimeout = null
@@ -35,14 +49,16 @@ const formattedDate = computed(() => {
 
 onMounted(async () => {
   await fetchTrainings()
+  await getCameras()
   timeInterval = setInterval(() => {
     currentTime.value = new Date()
   }, 1000)
 })
 
-onUnmounted(() => {
+onUnmounted(async () => {
   if (timeInterval) clearInterval(timeInterval)
   if (scanTimeout) clearTimeout(scanTimeout)
+  await stopCameraScanning()
 })
 
 async function fetchTrainings() {
@@ -69,17 +85,22 @@ function onTrainingChange() {
   }
 }
 
-function startScanning() {
+async function startScanning() {
   if (!selectedTrainingId.value) return
   scanning.value = true
+  // 카메라 모드면 자동 시작
+  if (scanMode.value === 'camera') {
+    await startCameraScanning()
+  }
 }
 
-function stopScanning() {
+async function stopScanning() {
+  await stopCameraScanning()
   scanning.value = false
 }
 
 async function handleQRScan(uuid) {
-  if (lastScan.value === uuid && Date.now() - lastScan.value.time < 3000) {
+  if (lastScan.value?.uuid === uuid && Date.now() - lastScan.value.time < 3000) {
     return
   }
 
@@ -95,32 +116,47 @@ async function handleQRScan(uuid) {
       const data = response.data.data
 
       if (exitMode.value === 'confirm') {
+        // 확인 모드: 확인 다이얼로그 표시
         pendingExit.value = data
         showConfirmDialog.value = true
       } else {
-        scanResult.value = {
-          success: true,
-          name: data.name,
-          message: '퇴소 처리 완료',
+        // 자동 모드: 바로 퇴소 처리 + 토스트 알림
+        try {
+          await api.post('/admin/confirm-exit', { uuid: uuid })
+          showToast(`${data.name}님 퇴소 완료`, 'success')
+          speakMessage(`${data.name}님, 퇴소 처리되었습니다.`)
+          // 진동 피드백
+          if (navigator.vibrate) {
+            navigator.vibrate([100, 50, 100])
+          }
+        } catch (exitErr) {
+          const errorMsg = exitErr.response?.data?.error?.message || '퇴소 처리 실패'
+          showToast(errorMsg, 'error')
+          speakErrorMessage(errorMsg)
         }
-        speakMessage(`${data.name}님, 퇴소 처리되었습니다.`)
-        clearResultAfterDelay()
       }
     } else {
-      scanResult.value = {
-        success: false,
-        message: response.data.error?.message || '스캔 처리 실패',
-      }
-      speakMessage('스캔 처리에 실패했습니다.')
-      clearResultAfterDelay()
+      const errorMsg = response.data.error?.message || '스캔 처리 실패'
+      showToast(errorMsg, 'error')
+      speakErrorMessage(errorMsg)
     }
   } catch (e) {
-    scanResult.value = {
-      success: false,
-      message: e.response?.data?.error?.message || '스캔 처리 실패',
-    }
-    speakMessage('스캔 처리에 실패했습니다.')
-    clearResultAfterDelay()
+    const errorMsg = e.response?.data?.error?.message || '서버 연결 오류'
+    showToast(errorMsg, 'error')
+    speakErrorMessage(errorMsg)
+  }
+}
+
+// 에러 메시지 음성 안내
+function speakErrorMessage(message) {
+  if (message.includes('입소하지 않은')) {
+    speakMessage('아직 입소하지 않은 인원입니다.')
+  } else if (message.includes('이미 퇴소')) {
+    speakMessage('이미 퇴소 처리된 인원입니다.')
+  } else if (message.includes('등록된 QR')) {
+    speakMessage('등록되지 않은 QR 코드입니다.')
+  } else {
+    speakMessage('처리에 실패했습니다.')
   }
 }
 
@@ -162,13 +198,45 @@ function clearResultAfterDelay() {
   }, 3000)
 }
 
+// 토스트 알림 추가
+function showToast(message, type = 'success') {
+  const id = Date.now()
+  toasts.value.push({ id, message, type })
+
+  // 3초 후 자동 제거
+  setTimeout(() => {
+    toasts.value = toasts.value.filter(t => t.id !== id)
+  }, 3000)
+}
+
 function speakMessage(message) {
-  if ('speechSynthesis' in window) {
-    const utterance = new SpeechSynthesisUtterance(message)
-    utterance.lang = 'ko-KR'
-    utterance.rate = 0.9
-    speechSynthesis.speak(utterance)
+  if (!('speechSynthesis' in window)) {
+    console.warn('TTS not supported')
+    return
   }
+
+  // 이전 음성 취소 (중복 방지)
+  speechSynthesis.cancel()
+
+  const utterance = new SpeechSynthesisUtterance(message)
+  utterance.lang = 'ko-KR'
+  utterance.rate = 0.9
+
+  // 한국어 음성 선택 시도
+  const voices = speechSynthesis.getVoices()
+  const koreanVoice = voices.find(v => v.lang.includes('ko'))
+  if (koreanVoice) {
+    utterance.voice = koreanVoice
+  }
+
+  // 디버그 로깅
+  console.log('TTS:', message)
+
+  utterance.onerror = (e) => {
+    console.error('TTS error:', e)
+  }
+
+  speechSynthesis.speak(utterance)
 }
 
 // 수동 QR 입력
@@ -178,6 +246,181 @@ function manualScan() {
     handleQRScan(manualUUID.value)
     manualUUID.value = ''
   }
+}
+
+// 카메라 목록 가져오기
+async function getCameras() {
+  try {
+    const devices = await Html5Qrcode.getCameras()
+    cameras.value = devices
+    if (devices.length > 0) {
+      cameraAvailable.value = true
+      // 후면 카메라 우선 선택
+      const backCamera = devices.find(d =>
+        d.label.toLowerCase().includes('back') ||
+        d.label.toLowerCase().includes('rear') ||
+        d.label.toLowerCase().includes('environment')
+      )
+      selectedCameraId.value = backCamera?.id || devices[0].id
+      cameraError.value = null
+    } else {
+      cameraAvailable.value = false
+      cameraError.value = null // 카메라가 없어도 에러는 아님
+    }
+  } catch (err) {
+    cameraAvailable.value = false
+    cameras.value = []
+    // NotFoundError는 카메라가 없는 것이므로 에러 메시지 표시하지 않음
+    if (err.name === 'NotFoundError' || err.message?.includes('Requested device not found')) {
+      cameraError.value = null
+      console.log('No camera found on this device')
+    } else {
+      cameraError.value = '카메라 접근 권한이 필요합니다.'
+      console.error('Failed to get cameras:', err)
+    }
+  }
+}
+
+// 카메라 스캔 시작
+async function startCameraScanning() {
+  if (!selectedTrainingId.value) return
+  if (cameraScanning.value) return
+  if (cameraLoading.value) return
+
+  // 카메라 모드로 전환
+  scanMode.value = 'camera'
+  cameraLoading.value = true
+  cameraError.value = null
+
+  // DOM이 렌더링될 때까지 대기
+  await nextTick()
+
+  // 약간의 지연 추가 (DOM 완전히 렌더링 대기)
+  await new Promise(resolve => setTimeout(resolve, 100))
+
+  // DOM 요소 확인
+  const qrReaderElement = document.getElementById('qr-reader')
+  if (!qrReaderElement) {
+    console.warn('QR reader element not found, retrying...')
+    cameraLoading.value = false
+    setTimeout(() => startCameraScanning(), 200)
+    return
+  }
+
+  try {
+    // 카메라 목록이 없으면 다시 시도
+    if (cameras.value.length === 0) {
+      try {
+        const devices = await Html5Qrcode.getCameras()
+        cameras.value = devices
+        if (devices.length > 0) {
+          cameraAvailable.value = true
+          const backCamera = devices.find(d =>
+            d.label.toLowerCase().includes('back') ||
+            d.label.toLowerCase().includes('rear') ||
+            d.label.toLowerCase().includes('environment')
+          )
+          selectedCameraId.value = backCamera?.id || devices[0].id
+        }
+      } catch (e) {
+        console.log('Could not enumerate cameras, will try direct access')
+      }
+    }
+
+    html5QrCode = new Html5Qrcode('qr-reader')
+
+    const config = {
+      fps: 10,
+      qrbox: { width: 200, height: 200 },
+      aspectRatio: 1.0
+    }
+
+    // 카메라 ID가 있으면 사용, 없으면 후면 카메라 시도
+    const cameraIdOrConfig = selectedCameraId.value || { facingMode: 'environment' }
+
+    console.log('Starting camera with:', cameraIdOrConfig)
+
+    await html5QrCode.start(
+      cameraIdOrConfig,
+      config,
+      onQrCodeSuccess,
+      () => {} // onScanError - 무시 (계속 스캔)
+    )
+
+    console.log('Camera started successfully')
+    cameraScanning.value = true
+    cameraAvailable.value = true
+    cameraError.value = null
+  } catch (err) {
+    console.error('Failed to start camera:', err)
+    // 권한 거부 또는 카메라 없음
+    if (err.name === 'NotAllowedError') {
+      cameraError.value = '카메라 권한을 허용해주세요.'
+    } else if (err.name === 'NotFoundError') {
+      cameraError.value = '사용 가능한 카메라가 없습니다.'
+      cameraAvailable.value = false
+    } else {
+      cameraError.value = '카메라 오류: ' + (err.message || '알 수 없는 오류')
+    }
+    // 카메라 실패 시 수동 모드로 전환
+    scanMode.value = 'manual'
+  } finally {
+    cameraLoading.value = false
+  }
+}
+
+// 카메라 스캔 중지
+async function stopCameraScanning() {
+  if (!cameraScanning.value || !html5QrCode) return
+
+  try {
+    await html5QrCode.stop()
+    html5QrCode.clear()
+    cameraScanning.value = false
+  } catch (err) {
+    console.error('Failed to stop camera:', err)
+  }
+}
+
+// QR 코드 인식 성공
+function onQrCodeSuccess(decodedText) {
+  // 중복 스캔 방지 (3초)
+  if (lastScan.value?.uuid === decodedText &&
+      Date.now() - lastScan.value.time < 3000) {
+    return
+  }
+
+  // 진동 피드백 (모바일)
+  if (navigator.vibrate) {
+    navigator.vibrate(200)
+  }
+
+  // 스캔 처리
+  handleQRScan(decodedText)
+}
+
+// 카메라 전환
+async function switchCamera() {
+  if (cameras.value.length <= 1) return
+
+  const currentIndex = cameras.value.findIndex(c => c.id === selectedCameraId.value)
+  const nextIndex = (currentIndex + 1) % cameras.value.length
+  selectedCameraId.value = cameras.value[nextIndex].id
+
+  if (cameraScanning.value) {
+    await stopCameraScanning()
+    await startCameraScanning()
+  }
+}
+
+// 스캔 모드 전환
+async function setScanMode(mode) {
+  if (mode === scanMode.value) return
+
+  if (mode === 'manual' && cameraScanning.value) {
+    await stopCameraScanning()
+  }
+  scanMode.value = mode
 }
 </script>
 
@@ -299,6 +542,47 @@ function manualScan() {
       <!-- Scanner Area -->
       <div v-if="scanning" class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-8 min-h-[400px]">
         <div class="max-w-lg mx-auto">
+          <!-- Scan Mode Toggle -->
+          <div class="flex justify-center gap-2 mb-6">
+            <button
+              @click="startCameraScanning"
+              :class="[
+                'flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all duration-200',
+                scanMode === 'camera'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              ]"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+              카메라 스캔
+            </button>
+            <button
+              @click="setScanMode('manual')"
+              :class="[
+                'flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all duration-200',
+                scanMode === 'manual'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              ]"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+              </svg>
+              수동 입력
+            </button>
+          </div>
+
+          <!-- Camera Error -->
+          <div v-if="cameraError" class="bg-red-500/20 border border-red-500/50 rounded-xl p-4 mb-6 text-center">
+            <p class="text-red-300">{{ cameraError }}</p>
+            <button @click="cameraError = null; startCameraScanning()" class="mt-2 text-sm text-red-400 hover:text-red-300 underline">
+              다시 시도
+            </button>
+          </div>
+
           <!-- Scan Result -->
           <Transition
             enter-active-class="transition duration-300 ease-out"
@@ -329,19 +613,61 @@ function manualScan() {
             </div>
           </Transition>
 
-          <!-- Scanning State -->
-          <div v-if="!scanResult" class="text-center py-8">
+          <!-- Camera Scanning View -->
+          <div v-if="!scanResult && scanMode === 'camera'" class="text-center">
+            <!-- QR Reader Container (항상 표시, 로딩 오버레이로 덮음) -->
+            <div class="relative inline-block">
+              <div id="qr-reader" class="qr-reader-container mx-auto rounded-2xl overflow-hidden"></div>
+
+              <!-- Loading Overlay -->
+              <div v-if="cameraLoading && !cameraScanning" class="absolute inset-0 bg-slate-800 rounded-2xl flex items-center justify-center z-20">
+                <div class="text-center">
+                  <svg class="w-12 h-12 text-emerald-500 mx-auto animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p class="text-emerald-400 text-sm mt-3 font-medium">카메라 시작 중...</p>
+                </div>
+              </div>
+
+              <!-- Camera Switch Button -->
+              <button
+                v-if="cameras.length > 1 && cameraScanning"
+                @click="switchCamera"
+                class="absolute top-3 right-3 p-2.5 bg-black/50 backdrop-blur rounded-xl hover:bg-black/70 transition-colors z-10"
+                title="카메라 전환"
+              >
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+              </button>
+
+              <!-- Scanning Indicator -->
+              <div v-if="cameraScanning" class="absolute bottom-3 left-1/2 -translate-x-1/2 z-10">
+                <div class="flex items-center gap-2 bg-black/60 backdrop-blur px-4 py-2 rounded-full">
+                  <span class="relative flex h-2.5 w-2.5">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
+                  <span class="text-white text-sm font-medium">QR코드를 스캔하세요</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manual Input Mode -->
+          <div v-if="!scanResult && scanMode === 'manual'" class="text-center py-8">
             <div class="w-56 h-56 border-4 border-dashed border-slate-600 rounded-2xl flex items-center justify-center mx-auto mb-8 relative">
               <div class="absolute inset-4 border-2 border-emerald-500/30 rounded-xl"></div>
               <svg class="w-20 h-20 text-slate-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
               </svg>
             </div>
-            <p class="text-xl text-slate-400 mb-2">QR 코드를 스캔해주세요</p>
-            <p class="text-sm text-slate-500">스캐너에 QR 코드를 대면 자동으로 인식됩니다</p>
+            <p class="text-xl text-slate-400 mb-2">UUID를 직접 입력해주세요</p>
+            <p class="text-sm text-slate-500">아래 입력창에 UUID를 입력하고 스캔 버튼을 누르세요</p>
           </div>
 
-          <!-- Manual Input -->
+          <!-- Manual Input (항상 표시) -->
           <div class="mt-8 flex gap-3">
             <input
               v-model="manualUUID"
@@ -421,5 +747,81 @@ function manualScan() {
         </Transition>
       </div>
     </Transition>
+
+    <!-- Toast Notifications -->
+    <div class="fixed top-4 right-4 z-50 space-y-2">
+      <TransitionGroup
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0 translate-x-8"
+        enter-to-class="opacity-100 translate-x-0"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100 translate-x-0"
+        leave-to-class="opacity-0 translate-x-8"
+      >
+        <div
+          v-for="toast in toasts"
+          :key="toast.id"
+          :class="[
+            'flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg min-w-[280px]',
+            toast.type === 'success'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-red-600 text-white'
+          ]"
+        >
+          <div class="flex-shrink-0">
+            <svg v-if="toast.type === 'success'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </div>
+          <span class="font-medium">{{ toast.message }}</span>
+        </div>
+      </TransitionGroup>
+    </div>
   </AdminLayout>
 </template>
+
+<style>
+/* QR Reader 커스텀 스타일 */
+.qr-reader-container {
+  width: 300px;
+  height: 300px;
+  margin: 0 auto;
+}
+
+#qr-reader {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  background: #1e293b !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+#qr-reader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 16px !important;
+}
+
+#qr-reader__scan_region {
+  border-radius: 16px;
+}
+
+#qr-reader__scan_region video {
+  border-radius: 16px !important;
+}
+
+/* html5-qrcode 기본 UI 숨기기 */
+#qr-reader__dashboard,
+#qr-reader__status_span,
+#qr-reader__header_message,
+#qr-reader__dashboard_section,
+#qr-reader__dashboard_section_csr,
+#qr-reader__dashboard_section_swaplink {
+  display: none !important;
+}
+</style>

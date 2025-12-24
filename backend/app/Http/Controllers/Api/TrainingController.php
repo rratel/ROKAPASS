@@ -11,13 +11,14 @@ class TrainingController extends Controller
     public function active()
     {
         $trainings = Training::whereIn('status', ['scheduled', 'active'])
-            ->orderBy('training_date', 'asc')
+            ->orderBy('start_date', 'asc')
             ->get()
             ->map(function ($training) {
                 return [
                     'id' => $training->id,
                     'name' => $training->name,
-                    'training_date' => $training->training_date->format('Y-m-d'),
+                    'start_date' => $training->start_date->format('Y-m-d'),
+                    'end_date' => $training->end_date->format('Y-m-d'),
                     'status' => $training->status,
                     'exit_mode' => $training->exit_mode,
                     'lunch_image_mon' => $training->lunch_image_mon,
@@ -25,6 +26,11 @@ class TrainingController extends Controller
                     'lunch_image_wed' => $training->lunch_image_wed,
                     'lunch_image_thu' => $training->lunch_image_thu,
                     'lunch_image_fri' => $training->lunch_image_fri,
+                    'lunch_image_mon_url' => $training->lunch_image_mon_url,
+                    'lunch_image_tue_url' => $training->lunch_image_tue_url,
+                    'lunch_image_wed_url' => $training->lunch_image_wed_url,
+                    'lunch_image_thu_url' => $training->lunch_image_thu_url,
+                    'lunch_image_fri_url' => $training->lunch_image_fri_url,
                 ];
             });
 
@@ -50,7 +56,8 @@ class TrainingController extends Controller
             'data' => [
                 'id' => $training->id,
                 'name' => $training->name,
-                'training_date' => $training->training_date->format('Y-m-d'),
+                'start_date' => $training->start_date->format('Y-m-d'),
+                'end_date' => $training->end_date->format('Y-m-d'),
                 'status' => $training->status,
                 'exit_mode' => $training->exit_mode,
                 'lunch_image_mon' => $training->lunch_image_mon,
@@ -58,6 +65,11 @@ class TrainingController extends Controller
                 'lunch_image_wed' => $training->lunch_image_wed,
                 'lunch_image_thu' => $training->lunch_image_thu,
                 'lunch_image_fri' => $training->lunch_image_fri,
+                'lunch_image_mon_url' => $training->lunch_image_mon_url,
+                'lunch_image_tue_url' => $training->lunch_image_tue_url,
+                'lunch_image_wed_url' => $training->lunch_image_wed_url,
+                'lunch_image_thu_url' => $training->lunch_image_thu_url,
+                'lunch_image_fri_url' => $training->lunch_image_fri_url,
             ],
         ]);
     }
@@ -104,7 +116,8 @@ class TrainingController extends Controller
                 'id' => $training->id,
                 'name' => $training->name,
                 'access_code' => $training->access_code,
-                'training_date' => $training->training_date->format('Y-m-d'),
+                'start_date' => $training->start_date->format('Y-m-d'),
+                'end_date' => $training->end_date->format('Y-m-d'),
                 'status' => $training->status,
                 'exit_mode' => $training->exit_mode,
                 'lunch_image_mon' => $training->lunch_image_mon,
@@ -112,6 +125,12 @@ class TrainingController extends Controller
                 'lunch_image_wed' => $training->lunch_image_wed,
                 'lunch_image_thu' => $training->lunch_image_thu,
                 'lunch_image_fri' => $training->lunch_image_fri,
+                // URL 형식으로도 반환 (프론트엔드에서 사용)
+                'lunch_image_mon_url' => $training->lunch_image_mon_url,
+                'lunch_image_tue_url' => $training->lunch_image_tue_url,
+                'lunch_image_wed_url' => $training->lunch_image_wed_url,
+                'lunch_image_thu_url' => $training->lunch_image_thu_url,
+                'lunch_image_fri_url' => $training->lunch_image_fri_url,
             ],
         ]);
     }
